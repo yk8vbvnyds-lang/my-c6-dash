@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>C6 Custom Dash</title>
+    <!-- Basic PWA Capabilities for iOS -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <style>
+        body {
+            background-color: #121212;
+            color: #ffffff;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+        .metric-container {
+            text-align: center;
+            margin: 20px;
+        }
+        .label {
+            font-size: 1.2rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: #888888;
+        }
+        .value {
+            font-size: 6rem;
+            font-weight: bold;
+            color: #00ffcc;
+            line-height: 1;
+        }
+        button {
+            background-color: #00ffcc;
+            color: #121212;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            border-radius: 30px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0, 255, 204, 0.3);
+            transition: transform 0.1s;
+        }
+        button:active { transform: scale(0.96); }
+        #status { margin-top: 15px; color: #555; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+
+    <div id="ui-connect">
+        <button onclick="connectC6Bike()">CONNECT C6 BIKE</button>
+        <div id="status">Waiting for user interaction...</div>
+    </div>
+
+    <div id="ui-dash" style="display: none;">
+        <div class="metric-container">
+            <div class="label">Cadence</div>
+            <div id="cadence-val" class="value">0</div>
+            <div class="label" style="font-size: 1rem; margin-top:5px;">RPM</div>
+        </div>
+    </div>
+
+<script>
+let lastWheelRevolutions = 0;
+let lastWheelEventTime = 0;
+let lastCrankRevolutions = 0;
+let lastCrankEventTime = 0;
+
+async function connectC6Bike() {
+    const statusDiv = document.getElementById('status');
+    statusDiv.innerText = "Opening Bluetooth selector...";
+    
+    try {
+        // Request connection specifically targeting standard Cycling Speed and Cadence
+        const device = await navigator.bluetooth.requestDevice({
+          filters: [{ services: ['cycling_speed_and_cadence'] }]
+        });
+        
+        statusDiv.innerText = "Connecting to bike...";
+        const server = await device.gatt.connect();
+        const service = await server.getPrimaryService('cycling_speed_and_cadence');
+        const characteristic = await service.getCharacteristic('csc_measurement');
+        
+        await characteristic.startNotifications();
+        characteristic.addEventListener('characteristicvaluechanged', parseC6Data);
+        
+        // Swap screens upon successful handshake
+        document.getElementById('ui-connect').style.display = 'none';
+        document.getElementById('ui-dash').style.display = 'block';
+        
+    } catch (error) {
+        statusDiv.innerText = `Error: ${error.message}`;
+        console.error(error);
+    }
+}
+
+function parseC6Data(event) {
+    const data = event.target.value;
+    let byteOffset = 0;
+    
+    // Read the 8-bit flag at byte 0
+    const flags = data.getUint8(byteOffset);
+    byteOffset += 1;
+    
+    // Bit 0 determines if Wheel Data is present
+    const hasWheelData = (flags & 0x01) !== 0;
+    // Bit 1 determines if Crank Data (Cadence) is present
+    const hasCrankData = (flags & 0x02) !== 0;
+    
+    // Skip past wheel telemetry if the bike sends it
+    if (hasWheelData) {
+        // Cumulative Wheel Revolutions (Uint32)
+        const wheelRevolutions = data.getUint32(byteOffset, true);
+        byteOffset += 4;
+        // Last Wheel Event Time (Uint16 in 1/1024 seconds)
+        const wheelEventTime = data.getUint16(byteOffset, true);
+        byteOffset += 2;
+    }
+    
+    // Extract the target cadence metrics
+    if (hasCrankData) {
+        // Cumulative Crank Revolutions (Uint16)
+        const crankRevolutions = data.getUint16(byteOffset, true);
+        byteOffset += 2;
+        // Last Crank Event Time (Uint16 in 1/1024 seconds)
+        const crankEventTime = data.getUint16(byteOffset, true);
+        byteOffset += 2;
+        
+        // Calculate RPM based on delta from the previous message packet
+        if (lastCrankEventTime > 0 && crankEventTime !== lastCrankEventTime) {
+            let revsDelta = crankRevolutions - lastCrankRevolutions;
+            let timeDelta = crankEventTime - lastCrankEventTime;
+            
+            // Handle 16-bit rollover math safely
+            if (revsDelta < 0) revsDelta += 65536;
+            if (timeDelta < 0) timeDelta += 65536;
+            
+            // Convert time from 1/1024s ticks to actual minutes
+            const minutesDelta = (timeDelta / 1024) / 60;
+            const currentRPM = Math.round(revsDelta / minutesDelta);
+            
+            if (currentRPM >= 0 && currentRPM < 250) { // filter noise out
+                document.getElementById('cadence-val').innerText = currentRPM;
+            }
+        }
+        
+        // Store states for the next incoming data packet
+        lastCrankRevolutions = crankRevolutions;
+        lastCrankEventTime = crankEventTime;
+    }
+}
+</script>
+</body>
+</html>

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>C6 Custom Dash</title>
+    <title>C6 Custom Pro Dash v5</title>
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <style>
@@ -17,16 +17,86 @@
             justify-content: center;
             height: 100vh;
             margin: 0;
+            overflow: hidden;
         }
-        .metric-container { text-align: center; margin: 20px; }
-        .label { font-size: 1.2rem; text-transform: uppercase; letter-spacing: 2px; color: #888888; }
-        .value { font-size: 6rem; font-weight: bold; color: #00ffcc; line-height: 1; }
+        #ui-connect { text-align: center; display: flex; flex-direction: column; gap: 15px; }
+        #ui-dash {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            width: 92%;
+            max-width: 600px;
+            text-align: center;
+        }
+        .metric-container {
+            background: #1e1e1e;
+            padding: 12px;
+            border-radius: 20px;
+            border: 1px solid #2d2d2d;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            transition: background-color 0.4s ease, border-color 0.4s ease, transform 0.2s ease;
+        }
+        .metric-container.featured { grid-column: span 2; }
+        .label { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 2px; color: #888888; }
+        .value { font-weight: bold; line-height: 1.1; margin: 5px 0; }
+        
+        .featured .value { font-size: 5rem; color: #00ffcc; }
+        .standard .value { font-size: 3rem; color: #ffbb00; }
+        .cal-box .value { color: #ff9433; }
+        
+        /* Dynamic Cadence Target Indicator Scaling */
+        .cadence-target-match { background-color: #11362e !important; border-color: #00ffcc !important; transform: scale(1.02); }
+        
+        /* Dynamic HR Zone Styling */
+        .hr-box .value { font-size: 3.5rem; color: #ffffff; }
+        .hr-zone-none { background: #1e1e1e; border-color: #2d2d2d; }
+        .hr-zone-green { background: #1b3a24; border-color: #00ff66; }
+        .hr-zone-yellow { background: #3a351b; border-color: #ffcc00; }
+        .hr-zone-red { background: #3a1b1b; border-color: #ff3333; animation: pulse-border 1s infinite alternate; }
+
+        @keyframes pulse-border {
+            from { border-color: #ff3333; box-shadow: 0 0 10px rgba(255, 51, 51, 0.5); }
+            to { border-color: #ff9999; box-shadow: 0 0 25px rgba(255, 51, 51, 0.8); }
+        }
+
         button {
             background-color: #00ffcc; color: #121212; border: none; padding: 15px 40px;
             font-size: 1.2rem; font-weight: bold; border-radius: 30px; cursor: pointer;
             box-shadow: 0 4px 15px rgba(0, 255, 204, 0.3);
+            transition: transform 0.2s, background-color 0.2s;
         }
-        #status { margin-top: 15px; color: #666; font-size: 0.9rem; }
+        button:active { transform: scale(0.95); background-color: #00cca3; }
+        #status { margin-top: 10px; color: #00ffcc; font-size: 0.9rem; letter-spacing: 1px; }
+
+        /* Summary Modal Overlays */
+        #ui-summary {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(18, 18, 18, 0.96);
+            z-index: 100;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+        }
+        .summary-card {
+            background: #252525;
+            padding: 25px;
+            border-radius: 25px;
+            border: 2px solid #aa66ff;
+            width: 82%;
+            max-width: 440px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+        }
+        .summary-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .summary-item .s-label { font-size: 0.8rem; color: #aaa; text-transform: uppercase; }
+        .summary-item .s-value { font-size: 1.7rem; font-weight: bold; color: #aa66ff; }
     </style>
 </head>
 <body>
@@ -37,44 +107,108 @@
     </div>
 
     <div id="ui-dash" style="display: none;">
-        <div class="metric-container">
-            <div class="label">Cadence</div>
+        <!-- Timer Row -->
+        <div class="metric-container standard" style="grid-column: span 2; padding: 10px;">
+            <div class="label">Workout Time</div>
+            <div id="timer-val" class="value" style="font-size: 2.3rem; color: #ffffff;">00:00</div>
+        </div>
+        <!-- Cadence Row with Active Target Window Tracking -->
+        <div id="cadence-container" class="metric-container featured">
+            <div class="label" id="cadence-lbl">Cadence</div>
             <div id="cadence-val" class="value">0</div>
-            <div class="label" style="font-size: 1rem; margin-top:5px;">RPM</div>
+            <div class="label" id="cadence-target-text" style="font-size: 0.8rem;">TARGET: 80 - 90 RPM</div>
+        </div>
+        <!-- Speed Row -->
+        <div class="metric-container standard">
+            <div class="label">Speed</div>
+            <div id="speed-val" class="value">0.0</div>
+            <div class="label" style="font-size: 0.8rem;">MPH</div>
+        </div>
+        <!-- Distance Row -->
+        <div class="metric-container standard">
+            <div class="label">Distance</div>
+            <div id="distance-val" class="value">0.00</div>
+            <div class="label" style="font-size: 0.8rem;">Miles</div>
+        </div>
+        <!-- Calories Burner Row -->
+        <div class="metric-container standard cal-box" style="grid-column: span 2;">
+            <div class="label">Calories Burned</div>
+            <div id="calories-val" class="value">0</div>
+            <div class="label" style="font-size: 0.8rem;">kcal (Est.)</div>
+        </div>
+        <!-- Heart Rate Row -->
+        <div id="hr-container" class="metric-container standard hr-box hr-zone-none" style="grid-column: span 2;">
+            <div class="label">Heart Rate</div>
+            <div id="hr-val" class="value">--</div>
+            <div class="label" id="hr-zone-text" style="font-size: 0.8rem;">NO SIGNAL</div>
+        </div>
+    </div>
+
+    <!-- Historical Summary & Apple Health Export Screen -->
+    <div id="ui-summary">
+        <div class="summary-card">
+            <div class="label" style="color:#00ffcc; font-size:1.3rem;">Workout Paused</div>
+            <div class="summary-grid">
+                <div class="summary-item"><div class="s-label">Total Time</div><div id="s-time" class="s-value">00:00</div></div>
+                <div class="summary-item"><div class="s-label">Total Distance</div><div id="s-dist" class="s-value">0.00 Mi</div></div>
+                <div class="summary-item"><div class="s-label">Total Calories</div><div id="s-cals" class="s-value">0</div></div>
+                <div class="summary-item"><div class="s-label">Max Cadence</div><div id="s-max-cad" class="s-value">0</div></div>
+                <div class="summary-item"><div class="s-label">Max Speed</div><div id="s-max-spd" class="s-value">0.0</div></div>
+                <div class="summary-item"><div class="s-label">Max Heart Rate</div><div id="s-max-hr" class="s-value">--</div></div>
+            </div>
+            
+            <button onclick="syncToAppleHealth()" style="background:#ff3b30; color:#fff; width:100%; margin-bottom:12px; font-size:1.1rem; box-shadow: 0 4px 15px rgba(255, 59, 48, 0.4);">
+                ❤️ SYNC TO APPLE HEALTH
+            </button>
+            <button onclick="resumeWorkout()" style="background:#aa66ff; color:#fff; width:100%; margin-bottom:10px; font-size:1rem;">RESUME RIDE</button>
+            <button onclick="resetAndCloseWorkout()" style="background:#333; color:#fff; width:100%; font-size:0.9rem;">RESET & EXIT</button>
         </div>
     </div>
 
 <script>
-let lastCrankRevolutions = 0;
-let lastCrankEventTime = 0;
+// Weight metric profile calibration parameter 
+const USER_WEIGHT_LBS = 175; 
+
+// Target Cadence Range window configuration constants
+const TARGET_CADENCE_MIN = 80;
+const TARGET_CADENCE_MAX = 90;
+
+// State Engines
+let lastCrankRevolutions = 0, lastCrankEventTime = 0;
+let lastWheelRevolutions = 0, lastWheelEventTime = 0;
+let totalDistanceMeters = 0;
 let bikeDevice = null;
 
-// Automatically run when the page loads
+let maxCadence = 0, maxSpeed = 0, maxHeartRate = 0;
+let currentBPM = 0, accumulatedCalories = 0;
+
+let totalSeconds = 0;
+let timerInterval = null, isTimerRunning = false;
+let lastDataPacketTime = 0, autoPauseCheckInterval = null;
+
+let audioCtx = null, lastBeepTime = 0;
+const WHEEL_CIRCUMFERENCE_METERS = 2.096; 
+
 window.addEventListener('DOMContentLoaded', async () => {
     const statusDiv = document.getElementById('status');
-    
-    // Check if the browser supports remembering devices
     if (navigator.bluetooth.getDevices) {
         const devices = await navigator.bluetooth.getDevices();
-        // If we found a previously paired C6 bike, try to auto-connect instantly
         if (devices.length > 0) {
             statusDiv.innerText = "Found paired bike! Auto-connecting...";
-            bikeDevice = devices[0];
+            bikeDevice = devices;
             setupBluetoothConnection(bikeDevice);
         } else {
-            statusDiv.innerText = "No paired bike found. Tap button to pair first time.";
+            statusDiv.innerText = "No paired bike found. Tap button to pair.";
         }
-    } else {
-        statusDiv.innerText = "Ready to pair.";
     }
 });
 
 async function connectC6Bike() {
     try {
-        // First-time manual pairing request
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         bikeDevice = await navigator.bluetooth.requestDevice({
           filters: [{ services: ['cycling_speed_and_cadence'] }],
-          optionalServices: ['cycling_speed_and_cadence'] // needed for persistent permissions
+          optionalServices: ['cycling_speed_and_cadence']
         });
         setupBluetoothConnection(bikeDevice);
     } catch (error) {
@@ -85,69 +219,8 @@ async function connectC6Bike() {
 async function setupBluetoothConnection(device) {
     const statusDiv = document.getElementById('status');
     try {
-        // Listen for accidental disconnections so it can re-connect automatically mid-ride
         device.addEventListener('gattserverdisconnected', onDisconnected);
-        
         const server = await device.gatt.connect();
         const service = await server.getPrimaryService('cycling_speed_and_cadence');
-        const characteristic = await service.getCharacteristic('csc_measurement');
-        
-        await characteristic.startNotifications();
-        characteristic.addEventListener('characteristicvaluechanged', parseC6Data);
-        
-        // Switch to the live workout view
-        document.getElementById('ui-connect').style.display = 'none';
-        document.getElementById('ui-dash').style.display = 'block';
-    } catch (error) {
-        statusDiv.innerText = "Connection failed. Retrying in 3 seconds...";
-        setTimeout(() => setupBluetoothConnection(device), 3000);
-    }
-}
 
-function onDisconnected(event) {
-    // If the bike drops connection, reset UI and look for it again automatically
-    document.getElementById('ui-connect').style.display = 'block';
-    document.getElementById('ui-dash').style.display = 'none';
-    document.getElementById('status').innerText = "Bike disconnected. Reconnecting...";
-    setupBluetoothConnection(event.target);
-}
-
-function parseC6Data(event) {
-    const data = event.target.value;
-    let byteOffset = 0;
-    
-    const flags = data.getUint8(byteOffset);
-    byteOffset += 1;
-    
-    const hasWheelData = (flags & 0x01) !== 0;
-    const hasCrankData = (flags & 0x02) !== 0;
-    
-    if (hasWheelData) { byteOffset += 6; } // Skip wheel data safely
-    
-    if (hasCrankData) {
-        const crankRevolutions = data.getUint16(byteOffset, true);
-        byteOffset += 2;
-        const crankEventTime = data.getUint16(byteOffset, true);
-        byteOffset += 2;
-        
-        if (lastCrankEventTime > 0 && crankEventTime !== lastCrankEventTime) {
-            let revsDelta = crankRevolutions - lastCrankRevolutions;
-            let timeDelta = crankEventTime - lastCrankEventTime;
-            
-            if (revsDelta < 0) revsDelta += 65536;
-            if (timeDelta < 0) timeDelta += 65536;
-            
-            const minutesDelta = (timeDelta / 1024) / 60;
-            const currentRPM = Math.round(revsDelta / minutesDelta);
-            
-            if (currentRPM >= 0 && currentRPM < 250) {
-                document.getElementById('cadence-val').innerText = currentRPM;
-            }
-        }
-        lastCrankRevolutions = crankRevolutions;
-        lastCrankEventTime = crankEventTime;
-    }
-}
-</script>
-</body>
-</html>
+    const characteristic = await service.getCharacteristic('csc_measurement');await characteristic.startNotifications();characteristic.addEventListener('characteristicvaluechanged', parseC6Data);document.getElementById('ui-connect').style.display = 'none';document.getElementById('ui-dash').style.display = 'grid';startInactivityWatcher();} catch (error) {statusDiv.innerText = "Connection failed. Retrying...";setTimeout(() => setupBluetoothConnection(device), 3000);}}function onDisconnected(event) {stopTimer();stopInactivityWatcher();document.getElementById('ui-connect').style.display = 'block';document.getElementById('ui-dash').style.display = 'none';document.getElementById('ui-summary').style.display = 'none';document.getElementById('status').innerText = "Bike disconnected. Reconnecting...";setupBluetoothConnection(event.target);}function startTimer() {if (!isTimerRunning) {isTimerRunning = true;timerInterval = setInterval(() => {totalSeconds++;const mins = String(Math.floor(totalSeconds / 60)).padStart(2, '0');const secs = String(totalSeconds % 60).padStart(2, '0');document.getElementById('timer-val').innerText = ${mins}:${secs};// Calorie Met Engine calculationslet caloriesPerSecond = 0;if (currentBPM > 40) {caloriesPerSecond = (((currentBPM * 0.6309) + (USER_WEIGHT_LBS * 0.09036) - 55.0969) / 4184);} else {const currentMPH = parseFloat(document.getElementById('speed-val').innerText);let metValue = 3.5;if (currentMPH >= 10 && currentMPH < 14) metValue = 6.8;else if (currentMPH >= 14 && currentMPH < 16) metValue = 8.8;else if (currentMPH >= 16) metValue = 11.0;caloriesPerSecond = (metValue * 3.5 * (USER_WEIGHT_LBS / 2.20462) / 200) / 60;}if (caloriesPerSecond > 0) {accumulatedCalories += caloriesPerSecond;document.getElementById('calories-val').innerText = Math.round(accumulatedCalories);}}, 1000);}}function stopTimer() {if (isTimerRunning) {clearInterval(timerInterval);isTimerRunning = false;}}function startInactivityWatcher() {autoPauseCheckInterval = setInterval(() => {if (isTimerRunning && (Date.now() - lastDataPacketTime > 5000)) {stopTimer();triggerSummaryOverlay();}}, 2000);}function stopInactivityWatcher() {clearInterval(autoPauseCheckInterval);}function triggerSummaryOverlay() {document.getElementById('s-time').innerText = document.getElementById('timer-val').innerText;document.getElementById('s-dist').innerText = document.getElementById('distance-val').innerText + " Mi";document.getElementById('s-cals').innerText = document.getElementById('calories-val').innerText;document.getElementById('s-max-cad').innerText = maxCadence;document.getElementById('s-max-spd').innerText = maxSpeed.toFixed(1) + " Mph";document.getElementById('s-max-hr').innerText = maxHeartRate > 0 ? maxHeartRate + " Bpm" : "--";document.getElementById('ui-summary').style.display = 'flex';}function resumeWorkout() {document.getElementById('ui-summary').style.display = 'none';lastDataPacketTime = Date.now();}function resetAndCloseWorkout() {totalSeconds = 0; totalDistanceMeters = 0; accumulatedCalories = 0;maxCadence = 0; maxSpeed = 0; maxHeartRate = 0; currentBPM = 0;document.getElementById('timer-val').innerText = "00:00";document.getElementById('distance-val').innerText = "0.00";document.getElementById('calories-val').innerText = "0";document.getElementById('cadence-val').innerText = "0";document.getElementById('speed-val').innerText = "0.0";document.getElementById('hr-val').innerText = "--";document.getElementById('cadence-container').className = "metric-container featured";document.getElementById('cadence-lbl').innerText = "Cadence";document.getElementById('ui-summary').style.display = 'none';}// --- APPLE HEALTH AUTOMATION LINK CONFIGURATION ---function syncToAppleHealth() {const finalMinutes = Math.max(1, Math.round(totalSeconds / 60));const finalCalories = document.getElementById('calories-val').innerText;const finalDistance = document.getElementById('distance-val').innerText;// Construct the universal shortcut protocol redirect queryconst shortcutHookURL = shortcuts://run-shortcut?name=LogC6Workout&input=text&text=${encodeURIComponent(finalMinutes + ',' + finalCalories + ',' + finalDistance)};window.location.href = shortcutHookURL;}function playRedZoneWarningBeep() {if (!audioCtx) return;const now = Date.now();if (now - lastBeepTime < 5000) return;lastBeepTime = now;try {const osc = audioCtx.createOscillator();const gainNode = audioCtx.createGain();osc.type = 'sine';osc.frequency.setValueAtTime(880, audioCtx.currentTime);gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);osc.connect(gainNode);gainNode.connect(audioCtx.destination);osc.start();osc.stop(audioCtx.currentTime + 0.3);} catch (e) { console.log(e); }}function updateHRZoneUI(bpm) {currentBPM = bpm;if (bpm > maxHeartRate) maxHeartRate = bpm;const container = document.getElementById('hr-container');const textLabel = document.getElementById('hr-zone-text');document.getElementById('hr-val').innerText = bpm;container.className = "metric-container standard hr-box ";if (bpm < 120) {container.classList.add("hr-zone-green");textLabel.innerText = "ZONE 1: WARM UP / AEROBIC";} else if (bpm >= 120 && bpm < 155) {container.classList.add("hr-zone-yellow");textLabel.innerText = "ZONE 2: THRESHOLD / HARD";} else {container.classList.add("hr-zone-red");textLabel.innerText = "WARNING: ZONE 3 MAXIMUM EFFORT";playRedZoneWarningBeep();}}function parseC6Data(event) {const data = event.target.value;let byteOffset = 0;const flags = data.getUint8(byteOffset);byteOffset += 1;const hasWheelData = (flags & 0x01) !== 0;const hasCrankData = (flags & 0x02) !== 0;const hasHRData = (flags & 0x04) !== 0;lastDataPacketTime = Date.now();if ((hasWheelData || hasCrankData) && document.getElementById('ui-summary').style.display !== 'flex') {startTimer();}if (hasWheelData) {const wheelRevolutions = data.getUint32(byteOffset, true);byteOffset += 4;const wheelEventTime = data.getUint16(byteOffset, true);byteOffset += 2;if (lastWheelEventTime > 0 && wheelEventTime !== lastWheelEventTime) {let wheelRevsDelta = wheelRevolutions - lastWheelRevolutions;let wheelTimeDelta = wheelEventTime - lastWheelEventTime;if (wheelRevsDelta < 0) wheelRevsDelta += 4294967296;if (wheelTimeDelta < 0) wheelTimeDelta += 65536;const distanceSegmentMeters = wheelRevsDelta * WHEEL_CIRCUMFERENCE_METERS;totalDistanceMeters += distanceSegmentMeters;document.getElementById('distance-val').innerText = (totalDistanceMeters * 0.000621371).toFixed(2);const minutesDelta = (wheelTimeDelta / 1024) / 60;if (minutesDelta > 0) {const milesPerHour = ((distanceSegmentMeters / minutesDelta) * 60) * 0.000621371;if (milesPerHour >= 0 && milesPerHour < 60) {document.getElementById('speed-val').innerText = milesPerHour.toFixed(1);if (milesPerHour > maxSpeed) maxSpeed = milesPerHour;}}}lastWheelRevolutions = wheelRevolutions;lastWheelEventTime = wheelEventTime;}if (hasCrankData) {const crankRevolutions = data.getUint16(byteOffset, true);byteOffset += 2;const crankEventTime = data.getUint16(byteOffset, true);byteOffset += 2;if (lastCrankEventTime > 0 && crankEventTime !== lastCrankEventTime) {let revsDelta = crankRevolutions - lastCrankRevolutions;let timeDelta = crankEventTime - lastCrankEventTime;if (revsDelta < 0) revsDelta += 65536;if (timeDelta < 0) timeDelta += 65536;const minutesDelta = (timeDelta / 1024) / 60;const currentRPM = Math.round(revsDelta / minutesDelta);if (currentRPM >= 0 && currentRPM < 250) {document.getElementById('cadence-val').innerText = currentRPM;if (currentRPM > maxCadence) maxCadence = currentRPM;// --- TARGET CADENCE VISUAL ENGINE ---const cadContainer = document.getElementById('cadence-container');const cadLabel = document.getElementById('cadence-lbl');if (currentRPM >= TARGET_CADENCE_MIN && currentRPM <= TARGET_CADENCE_MAX) {cadContainer.className = "metric-container featured cadence-target-match";cadLabel.innerText = "Cadence (🎯 ON TARGET)";} else {cadContainer.className = "metric-container featured";cadLabel.innerText = "Cadence";}if (currentRPM === 0 && document.getElementById('speed-val').innerText === "0.0") {stopTimer();}}}lastCrankRevolutions = crankRevolutions;lastCrankEventTime = crankEventTime;}if (hasHRData) {const bikeHeartRate = data.getUint8(byteOffset);if (bikeHeartRate > 30) {updateHRZoneUI(bikeHeartRate);}}}
